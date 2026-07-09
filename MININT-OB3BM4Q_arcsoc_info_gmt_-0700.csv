@@ -1,0 +1,4 @@
+Timestamp,Cycle,ServiceName,ProcessCount,SumProcessorUtilization,SumPrivateBytes,SumVirtualBytes,SumThreadCount,SumHandleCount
+"2026-07-09 07:37:21","1",,,,,,,
+"2026-07-09 07:37:32","2",,,,,,,
+"2026-07-09 07:37:43","3",,,,,,,
