@@ -2,7 +2,11 @@
 param(
 	[Parameter(Mandatory = $false)]
 	[ValidateRange(1, 86400)]
-	[int]$IntervalSeconds = 10
+	[int]$IntervalSeconds = 10,
+
+	[Parameter(Mandatory = $false)]
+	[ValidateRange(1, 525600)]
+	[int]$DurationMinutes
 )
 
 Set-StrictMode -Version Latest
@@ -16,55 +20,21 @@ $offsetHours = [int]($offsetTotalMinutes / 60)
 $offsetMinutes = $offsetTotalMinutes % 60
 $gmtOffset = "{0}{1:00}{2:00}" -f $offsetSign, $offsetHours, $offsetMinutes
 $outputFile = Join-Path -Path $PSScriptRoot -ChildPath ("{0}_arcsoc_info_gmt_{1}.csv" -f $machineName, $gmtOffset)
+
+if (Test-Path -Path $outputFile) {
+	$archiveTimestamp = (Get-Item -Path $outputFile).LastWriteTime.ToString('yyyyMMdd_HHmmss')
+	$archiveName = [System.IO.Path]::GetFileNameWithoutExtension($outputFile) + "_$archiveTimestamp.csv"
+	$archivePath = Join-Path -Path $PSScriptRoot -ChildPath $archiveName
+	Rename-Item -Path $outputFile -NewName $archivePath
+	Write-Verbose "Existing output file renamed to '$archivePath'."
+}
+
 $expectedHeader = 'Timestamp,Cycle,ServiceName,ProcessCount,SumProcessorUtilization,SumPrivateBytes,SumVirtualBytes,SumThreadCount,SumHandleCount'
-$expectedQuotedHeader = '"Timestamp","Cycle","ServiceName","ProcessCount","SumProcessorUtilization","SumPrivateBytes","SumVirtualBytes","SumThreadCount","SumHandleCount"'
-$legacyHeaderV1 = 'Timestamp,ServiceName,ProcessCount,SumProcessorUtilization,SumPrivateBytes,SumVirtualBytes'
-$legacyHeaderV2 = 'Timestamp,ServiceName,ProcessCount,SumProcessorUtilization,SumPrivateBytes,SumVirtualBytes,SumThreadCount,SumHandleCount'
 
-if (-not (Test-Path -Path $outputFile)) {
-	$expectedHeader | Set-Content -Path $outputFile
-}
-else {
-	$headerLine = Get-Content -Path $outputFile -TotalCount 1
-	if ($headerLine -eq $legacyHeaderV1 -or $headerLine -eq $legacyHeaderV2) {
-		$legacyData = Import-Csv -Path $outputFile
-		$cycleValue = 1
-		$upgradedObjects = foreach ($row in $legacyData) {
-			$obj = [ordered]@{
-				Timestamp = $row.Timestamp
-				Cycle = $cycleValue
-				ServiceName = $row.ServiceName
-				ProcessCount = $row.ProcessCount
-				SumProcessorUtilization = $row.SumProcessorUtilization
-				SumPrivateBytes = $row.SumPrivateBytes
-				SumVirtualBytes = $row.SumVirtualBytes
-				SumThreadCount = $null
-				SumHandleCount = $null
-			}
-
-			if ($headerLine -eq $legacyHeaderV2) {
-				$obj.SumThreadCount = $row.SumThreadCount
-				$obj.SumHandleCount = $row.SumHandleCount
-			}
-
-			$cycleValue++
-			[pscustomobject]$obj
-		}
-
-		if (@($upgradedObjects).Count -gt 0) {
-			$upgradedObjects | Export-Csv -Path $outputFile -NoTypeInformation
-		}
-		else {
-			$expectedHeader | Set-Content -Path $outputFile
-		}
-	}
-}
-
-if ((Get-Content -Path $outputFile -TotalCount 1) -notin @($expectedHeader, $expectedQuotedHeader)) {
-	throw "Unexpected CSV header in '$outputFile'."
-}
+$expectedHeader | Set-Content -Path $outputFile
 
 $cycle = 1
+$endTime = if ($PSBoundParameters.ContainsKey('DurationMinutes')) { (Get-Date).AddMinutes($DurationMinutes) } else { $null }
 
 function Get-ServiceNameFromCommandLine {
 	param(
@@ -94,6 +64,11 @@ function Get-ServiceNameFromCommandLine {
 }
 
 while ($true) {
+	if ($null -ne $endTime -and (Get-Date) -ge $endTime) {
+		Write-Verbose "DurationMinutes ($DurationMinutes) elapsed. Exiting."
+		break
+	}
+
 	$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
 	$arcSocProcesses = Get-CimInstance -ClassName Win32_Process -Filter "Name = 'ArcSOC.exe'"

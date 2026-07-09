@@ -28,17 +28,31 @@ If no `ArcSOC.exe` processes are found during a cycle, a null row is written to 
 - Must be run on the ArcGIS Server machine being monitored
 - Requires permission to query WMI/CIM (`Win32_Process`, `Win32_PerfFormattedData_PerfProc_Process`)
 
+## Parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `-IntervalSeconds` | `int` | `10` | Seconds to wait between polling cycles (1–86400). |
+| `-DurationMinutes` | `int` | *(none)* | If specified, the script runs for this many minutes then exits gracefully (1–525600). Omit to run indefinitely. |
+
 ## Usage
 
 ```powershell
-# Run with the default 10-second polling interval
+# Run indefinitely with the default 10-second polling interval
 .\Get-ArcSocInfo.ps1
 
-# Run with a custom interval (e.g., 30 seconds)
+# Run with a custom interval
 .\Get-ArcSocInfo.ps1 -IntervalSeconds 30
+
+# Run for a fixed duration (e.g., 30 minutes) then exit
+.\Get-ArcSocInfo.ps1 -DurationMinutes 30
+
+# Custom interval and fixed duration
+.\Get-ArcSocInfo.ps1 -IntervalSeconds 15 -DurationMinutes 60
 ```
 
-The script runs indefinitely. Press `Ctrl+C` to stop it.
+When no `-DurationMinutes` is specified the script runs indefinitely. Press `Ctrl+C` to stop it early.
+
 
 ## Output
 
@@ -50,6 +64,12 @@ MACHINENAME_arcsoc_info_gmt_-0700.csv
 
 > **Note:** CSV output files are excluded from this repository via `.gitignore`.
 
-## Legacy CSV Upgrade
+## Archiving Existing Output
 
-If an existing CSV from a previous version (missing `Cycle`, `SumThreadCount`, or `SumHandleCount` columns) is detected, the script automatically upgrades it to the current schema before appending new data.
+On startup, if an output CSV from a previous run already exists, the script renames it by appending the file's last-write timestamp before creating a fresh file. For example:
+
+```
+MACHINENAME_arcsoc_info_gmt_-0700.csv  →  MACHINENAME_arcsoc_info_gmt_-0700_20260709_143022.csv
+```
+
+This means each run produces its own unmodified CSV, making it safe to run the script repeatedly without losing prior data.
